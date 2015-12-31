@@ -1,116 +1,120 @@
 <?php
 
-class PaymentTestPage extends Page {
+class PaymentTestPage extends Page
+{
 
-  /**
+    /**
    * TODO Could use to create default payment test page when /dev/build is run
    */
-  function requireDefaultRecords() {
-    parent::requireDefaultRecords();
+  public function requireDefaultRecords()
+  {
+      parent::requireDefaultRecords();
   }
 }
 
-class PaymentTestPage_Controller extends Page_Controller {
+class PaymentTestPage_Controller extends Page_Controller
+{
 
-  function index() {
-    return array( 
-       'Content' => $this->Content, 
-       'Form' => $this->ProcessForm() 
+    public function index()
+    {
+        return array(
+       'Content' => $this->Content,
+       'Form' => $this->ProcessForm()
     );
-  }
+    }
 
   /**
    * Get the order form for processing a dummy payment
    */
-  function ProcessForm() {
-    $fields = new FieldList;
+  public function ProcessForm()
+  {
+      $fields = new FieldList;
 
     // Create a dropdown select field for choosing gateway
     $supported_methods = PaymentProcessor::get_supported_methods();
 
-    $source = array();
-    foreach ($supported_methods as $methodName) {
-      $methodConfig = PaymentFactory::get_factory_config($methodName);
-      $source[$methodName] = $methodConfig['title'];
-    }
+      $source = array();
+      foreach ($supported_methods as $methodName) {
+          $methodConfig = PaymentFactory::get_factory_config($methodName);
+          $source[$methodName] = $methodConfig['title'];
+      }
 
-    $fields->push(new DropDownField(
-      'PaymentMethod', 
-      'Select Payment Method', 
+      $fields->push(new DropDownField(
+      'PaymentMethod',
+      'Select Payment Method',
       $source
     ));
 
-    $actions = new FieldList(
+      $actions = new FieldList(
       new FormAction('proceed', 'Proceed')
     );
     
-    $processForm = new Form($this, 'ProcessForm', $fields, $actions);
-    $processForm->disableSecurityToken();
-    return $processForm;
+      $processForm = new Form($this, 'ProcessForm', $fields, $actions);
+      $processForm->disableSecurityToken();
+      return $processForm;
   }
   
-  function proceed($data, $form) {
+    public function proceed($data, $form)
+    {
+        if (isset($data['PaymentMethod'])) {
+            Session::set('PaymentMethod', $data['PaymentMethod']);
+        }
 
-    if (isset($data['PaymentMethod'])) Session::set('PaymentMethod', $data['PaymentMethod']);
-
-    return array(
+        return array(
       'Content' => $this->Content,
       'Form' => $this->OrderForm()
     );
-  }
-  
-  function OrderForm() {
-
-    $paymentMethod = Session::get('PaymentMethod');
-
-    try {
-      $processor = PaymentFactory::factory($paymentMethod);
-    } 
-    catch (Exception $e) {
-      $fields = new FieldList(array(new ReadonlyField($e->getMessage())));
-      $actions = new FieldList();
-      return new Form($this, 'OrderForm', $fields, $actions);
     }
-    
-    $fields = $processor->getFormFields();
-    $fields->push(new TextField('PaymentMethod', 'PaymentMethod', $paymentMethod));
-    
-    $actions = new FieldList(
-      new FormAction('processOrder', 'Process Order')  
-    ); 
+  
+    public function OrderForm()
+    {
+        $paymentMethod = Session::get('PaymentMethod');
 
-    $validator = $processor->getFormRequirements();
+        try {
+            $processor = PaymentFactory::factory($paymentMethod);
+        } catch (Exception $e) {
+            $fields = new FieldList(array(new ReadonlyField($e->getMessage())));
+            $actions = new FieldList();
+            return new Form($this, 'OrderForm', $fields, $actions);
+        }
+    
+        $fields = $processor->getFormFields();
+        $fields->push(new TextField('PaymentMethod', 'PaymentMethod', $paymentMethod));
+    
+        $actions = new FieldList(
+      new FormAction('processOrder', 'Process Order')
+    );
 
-    return new Form($this, 'OrderForm', $fields, $actions, $validator);
-  }
+        $validator = $processor->getFormRequirements();
+
+        return new Form($this, 'OrderForm', $fields, $actions, $validator);
+    }
   
   /**
    * Process order
    */
-  function processOrder($data, $form) {
-    $paymentMethod = $data['PaymentMethod'];
+  public function processOrder($data, $form)
+  {
+      $paymentMethod = $data['PaymentMethod'];
     
-    try {
-      $paymentProcessor = PaymentFactory::factory($paymentMethod);
-    } 
-    catch (Exception $e) {
-      return array(
-        'Content' => $e->getMessage() 
+      try {
+          $paymentProcessor = PaymentFactory::factory($paymentMethod);
+      } catch (Exception $e) {
+          return array(
+        'Content' => $e->getMessage()
       );
-    }
+      }
 
-    try {
-
-      $paymentProcessor->setRedirectURL($this->link() . 'completed');
-      $paymentProcessor->capture($data);
-    } 
-    catch (Exception $e) {
+      try {
+          $paymentProcessor->setRedirectURL($this->link() . 'completed');
+          $paymentProcessor->capture($data);
+      } catch (Exception $e) {
 
       //This is where we catch gateway validation or gateway unreachable errors
       $result = $paymentProcessor->gateway->getValidationResult();
-      $payment = $paymentProcessor->payment;
+          $payment = $paymentProcessor->payment;
 
-      return array(
+          return array(
         'Content' => $this->customise(array(
           'ExceptionMessage' => $e->getMessage(),
           'ValidationMessage' => $result->message(),
@@ -118,22 +122,21 @@ class PaymentTestPage_Controller extends Page_Controller {
           'Payment' => $payment
         ))->renderWith('PaymentTestPage')
       );
-    }
+      }
   }
   
   /**
    * Show a page after a payment is completed 
    */
-  function completed() {
+  public function completed()
+  {
+      $paymentID = Session::get('PaymentID');
+      $payment = Payment::get()->byID($paymentID);
 
-    $paymentID = Session::get('PaymentID');
-    $payment = Payment::get()->byID($paymentID);
-
-    return array(
+      return array(
       'Content' => $this->customise(array(
         'Payment' => $payment
       ))->renderWith('PaymentTestPage')
     );
   }
 }
-
